@@ -13,8 +13,9 @@ struct Hub;
 
 template <bool isServer>
 struct WIN32_EXPORT Group : uS::NodeData {
-    friend struct Hub;
+    friend struct Hub; // su: 
     std::function<void(WebSocket<isServer>, HttpRequest)> connectionHandler;
+    std::function<void(WebSocket<isServer>)> transferHandler;
     std::function<void(WebSocket<isServer>, char *message, size_t length, OpCode opCode)> messageHandler;
     std::function<void(WebSocket<isServer>, int code, char *message, size_t length)> disconnectionHandler;
     std::function<void(WebSocket<isServer>, char *, size_t)> pingHandler;
@@ -60,6 +61,7 @@ protected:
 
 public:
     void onConnection(std::function<void(WebSocket<isServer>, HttpRequest)> handler);
+    void onTransfer(std::function<void(WebSocket<isServer>)> handler);
     void onMessage(std::function<void(WebSocket<isServer>, char *, size_t, OpCode)> handler);
     void onDisconnection(std::function<void(WebSocket<isServer>, int code, char *message, size_t length)> handler);
     void onPing(std::function<void(WebSocket<isServer>, char *, size_t)> handler);
@@ -82,7 +84,7 @@ public:
     // todo: handle nested forEachs with removeWebSocket
     template <class F>
     void forEach(const F &cb) {
-        Poll *iterator = webSocketHead;
+        Poll *iterator = webSocketHead; // su: will be set at Group<isServer>::addWebSocket.addWebSocket {Group.cpp}
         iterators.push(iterator);
         while (iterator) {
             Poll *lastIterator = iterator;
@@ -99,7 +101,7 @@ public:
     // duplicated code for now!
     template <class F>
     void forEachHttpSocket(const F &cb) {
-        Poll *iterator = httpSocketHead;
+        Poll *iterator = httpSocketHead; // su: top
         iterators.push(iterator);
         while (iterator) {
             Poll *lastIterator = iterator;

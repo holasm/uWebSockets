@@ -14,6 +14,7 @@
 #endif
 
 #ifdef __APPLE__
+#include <libkern/OSByteOrder.h>
 #define htobe64(x) OSSwapHostToBigInt64(x)
 #define be64toh(x) OSSwapBigToHostInt64(x)
 #endif
@@ -107,6 +108,7 @@ Context createContext(std::string certChainFileName, std::string keyFileName, st
 
 struct SocketData;
 
+// ???
 struct WIN32_EXPORT NodeData {
     char *recvBufferMemoryBlock;
     char *recvBuffer;
@@ -162,6 +164,7 @@ struct WIN32_EXPORT NodeData {
     }
 };
 
+// a linked-list element containing 
 struct SocketData {
     NodeData *nodeData;
     SSL *ssl;
@@ -175,6 +178,7 @@ struct SocketData {
 
     }
 
+    // socket data will be put in this message queue
     struct Queue {
         struct Message {
             const char *data;

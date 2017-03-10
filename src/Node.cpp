@@ -11,9 +11,9 @@ void NodeData::asyncCallback(Async *async)
         transferData.p->init(nodeData->loop, transferData.fd);
         transferData.p->setCb(transferData.pollCb);
         transferData.p->start(transferData.socketData->poll);
-        transferData.p->setData(transferData.socketData);
-        transferData.socketData->nodeData = nodeData;
-        transferData.cb(transferData.p);
+        transferData.p->setData(transferData.socketData); // set the SocketData to void pointer
+        transferData.socketData->nodeData = nodeData; // set NodeData to void
+        transferData.cb(transferData.p); // 
     }
 
     for (Poll *p : nodeData->changePollQueue) {
@@ -38,12 +38,14 @@ Node::Node(int recvLength, int prePadding, int postPadding, bool useDefaultLoop)
     nodeData->loop = loop;
     nodeData->asyncMutex = &asyncMutex;
 
+    // important!
     int indices = NodeData::getMemoryBlockIndex(NodeData::preAllocMaxSize) + 1;
     nodeData->preAlloc = new char*[indices];
     for (int i = 0; i < indices; i++) {
         nodeData->preAlloc[i] = nullptr;
     }
 
+    // setup SSL
     nodeData->clientContext = SSL_CTX_new(SSLv23_client_method());
     SSL_CTX_set_options(nodeData->clientContext, SSL_OP_NO_SSLv3);
 }

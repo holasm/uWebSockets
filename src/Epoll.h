@@ -2,31 +2,24 @@
 #define EPOLL_H
 
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <chrono>
+#include <algorithm>
+#include <vector>
 
-// these should be renamed (don't add more than these, only these are used)
 typedef int uv_os_sock_t;
-typedef void uv_handle_t;
-typedef void (*uv_close_cb)(uv_handle_t *);
-static const int UV_READABLE = EPOLLIN | EPOLLHUP;
+static const int UV_READABLE = EPOLLIN;
 static const int UV_WRITABLE = EPOLLOUT;
-static const int UV_VERSION_MINOR = 5;
 
 struct Loop;
 struct Poll;
 struct Timer;
 
 extern Loop *loops[128];
-extern int loopHead;
-
 extern void (*callbacks[128])(Poll *, int, int);
-extern int cbHead;
-
-#include <iostream>
-#include <chrono>
-#include <algorithm>
-#include <vector>
+extern int loopHead, cbHead;
 
 struct Timepoint {
     void (*cb)(Timer *);
@@ -39,9 +32,12 @@ struct Loop {
     int epfd;
     unsigned char index;
     int numPolls = 0;
+    bool cancelledLastTimer;
+    int delay = -1;
     epoll_event readyEvents[1024];
     std::chrono::system_clock::time_point timepoint;
     std::vector<Timepoint> timers;
+    std::vector<Poll *> closing;
 
     Loop(bool defaultLoop) {
         epfd = epoll_create(1);
@@ -57,38 +53,14 @@ struct Loop {
         ::close(epfd);
         // todo: proper removal
         loopHead--;
+
+        delete this;
     }
 
     void run();
 
     int getEpollFd() {
         return epfd;
-    }
-};
-
-struct Async {
-    Async(Loop *loop) {
-        std::terminate();
-    }
-
-    void start(void (*cb)(Async *)) {
-
-    }
-
-    void send() {
-
-    }
-
-    void close(uv_close_cb cb) {
-
-    }
-
-    void setData(void *data) {
-
-    }
-
-    void *getData() {
-        return nullptr;
     }
 };
 
@@ -106,6 +78,14 @@ struct Timer {
         std::sort(loop->timers.begin(), loop->timers.end(), [](const Timepoint &a, const Timepoint &b) {
             return a.timepoint < b.timepoint;
         });
+
+        // insertion sort
+
+
+        loop->delay = -1;
+        if (loop->timers.size()) {
+            loop->delay = std::max<int>(std::chrono::duration_cast<std::chrono::milliseconds>(loop->timers[0].timepoint - loop->timepoint).count(), 0);
+        }
     }
 
     void setData(void *data) {
@@ -116,6 +96,7 @@ struct Timer {
         return data;
     }
 
+    // always called before destructor
     void stop() {
         auto pos = loop->timers.begin();
         for (Timepoint &t : loop->timers) {
@@ -125,13 +106,16 @@ struct Timer {
             }
             pos++;
         }
+        loop->cancelledLastTimer = true;
 
-        // cannot start a timer again
-        loop = nullptr;
+        loop->delay = -1;
+        if (loop->timers.size()) {
+            loop->delay = std::max<int>(std::chrono::duration_cast<std::chrono::milliseconds>(loop->timers[0].timepoint - loop->timepoint).count(), 0);
+        }
     }
 
-    void close(uv_close_cb cb) {
-        //std::cout << "Timer::close" << std::endl;
+    void close() {
+        delete this;
     }
 };
 
@@ -142,23 +126,18 @@ struct Poll {
     int fd = -1; // 4 bytes
     unsigned char loopIndex, cbIndex; // 2 bytes (leaves 2 bytes padding)
 
+    // up to 4k loops
+    /*struct {
+        int cbIndex : 4;
+        int loopIndex : 12;
+    };*/
+
     Poll(Loop *loop, uv_os_sock_t fd) {
         init(loop, fd);
     }
 
     void init(Loop *loop, uv_os_sock_t fd) {
-        int flags = fcntl(fd, F_GETFL, 0);
-        if (flags == -1) {
-            std::cout << "Poll::init failure" << std::endl;
-            return;// -1;
-        }
-        flags |= O_NONBLOCK;
-        flags = fcntl (fd, F_SETFL, flags);
-        if (flags == -1) {
-            std::cout << "Poll::init failure" << std::endl;
-            return;// -1;
-        }
-
+        fcntl (fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
         loopIndex = loop->index;
         this->fd = fd;
         event.events = 0;
@@ -166,8 +145,9 @@ struct Poll {
         loop->numPolls++;
     }
 
+    // todo: remove these, fix up connection callback
     Poll() {
-        std::cout << "Poll::Poll()" << std::endl;
+
     }
 
     ~Poll() {
@@ -189,6 +169,7 @@ struct Poll {
         return data;
     }
 
+    // pass a callback as argumant and save in callbacks
     void setCb(void (*cb)(Poll *p, int status, int events)) {
         cbIndex = cbHead;
         for (int i = 0; i < cbHead; i++) {
@@ -197,9 +178,9 @@ struct Poll {
                 break;
             }
         }
+        // if cb does not already exists in callbacks
         if (cbIndex == cbHead) {
             callbacks[cbHead++] = cb;
-            std::cout << "Poll::setCb increases cbHead to " << cbHead << std::endl;
         }
     }
 
@@ -217,10 +198,9 @@ struct Poll {
         epoll_ctl(loops[loopIndex]->epfd, EPOLL_CTL_DEL, fd, &event);
     }
 
-    // all callbacks only hold deletes
-    void close(uv_close_cb cb) {
+    void close() {
         fd = -1;
-        loops[loopIndex]->numPolls--;
+        loops[loopIndex]->closing.push_back(this);
     }
 
     void (*getPollCb())(Poll *, int, int) {
@@ -229,6 +209,35 @@ struct Poll {
 
     Loop *getLoop() {
         return loops[loopIndex];
+    }
+};
+
+struct Async : Poll {
+    void (*cb)(Async *);
+
+    Async(Loop *loop) : Poll(loop, ::eventfd(0, 0)) {
+    }
+
+    void start(void (*cb)(Async *)) {
+        this->cb = cb;
+        Poll::setCb([](Poll *p, int, int) {
+            uint64_t val;
+            if (::read(p->fd, &val, 8) == 8) {
+                ((Async *) p)->cb((Async *) p);
+            }
+        });
+        Poll::start(UV_READABLE);
+    }
+
+    void send() {
+        uint64_t one = 1;
+        ::write(fd, &one, 8);
+    }
+
+    void close() {
+        Poll::stop();
+        ::close(fd);
+        Poll::close();
     }
 };
 

@@ -8,7 +8,7 @@ namespace uS {
 // should derive directly from poll?
 class WIN32_EXPORT Socket {
 protected:
-    Poll *p;
+    Poll *p; // su: stream_descriptor socket
 
 public:
     Socket(Poll *p) : p(p) {
@@ -33,9 +33,7 @@ public:
         }
 
         p->stop();
-        p->close([](uv_handle_t *h) {
-            delete (Poll *) h;
-        });
+        p->close();
     }
 
     static Poll *init(NodeData *nodeData, uv_os_sock_t fd, SSL *ssl) {
@@ -127,12 +125,12 @@ public:
         SocketData *socketData = getSocketData();
         NodeData *nodeData = getNodeData(socketData);
 
-        Timer *timer = new Timer(nodeData->loop);
-        timer->setData(p);
+        Timer *timer = new Timer(nodeData->loop); //  su: io_service
+        timer->setData(p); // set the Poll: socket
         timer->start([](Timer *timer) {
             Socket s((Poll *) timer->getData());
             s.cancelTimeout();
-            onTimeout(s);
+            onTimeout(s); //su: onTimeout ==> WebSocket<isServer>::onEnd | 
         }, timeoutMs, 0);
 
         socketData->user = timer;
@@ -142,9 +140,7 @@ public:
         Timer *timer = (Timer *) getUserData();
         if (timer) {
             timer->stop();
-            timer->close([](uv_handle_t *handle) {
-                delete (Timer *) handle;
-            });
+            timer->close();
             getSocketData()->user = nullptr;
         }
     }
@@ -310,9 +306,7 @@ public:
             SSL_free(ssl);
         }
 
-        p->close([](uv_handle_t *h) {
-            delete (Poll *) h;
-        });
+        p->close();
     }
 
     bool hasEmptyQueue() {

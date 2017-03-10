@@ -36,12 +36,12 @@ void Group<isServer>::timerCallback(Timer *timer) {
 template <bool isServer>
 void Group<isServer>::startAutoPing(int intervalMs, std::string userMessage) {
     timer = new Timer(loop);
-    timer->setData(this);
+    timer->setData(this); // 
     timer->start(timerCallback, intervalMs, intervalMs);
     userPingMessage = userMessage;
 }
 
-// WIP
+// su: adds httpSocket: Poll at the top of the lisked-list
 template <bool isServer>
 void Group<isServer>::addHttpSocket(Poll *httpSocket) {
 
@@ -83,9 +83,7 @@ void Group<isServer>::removeHttpSocket(Poll *httpSocket) {
         httpSocketHead = (Poll *) nullptr;
 
         httpTimer->stop();
-        httpTimer->close([](uv_handle_t *handle) {
-            delete (Timer *) handle;
-        });
+        httpTimer->close();
 
     } else {
         if (socketData->prev) {
@@ -106,8 +104,11 @@ void Group<isServer>::addWebSocket(Poll *webSocket) {
     ((uS::SocketData *) webSocket->getData())->next = nullptr;
     ((uS::SocketData *) webSocket->getData())->prev = nullptr;
 
+    // su: poll->data: SocketData
+    // su: poll->data->next, poll->data->prev
+    // su: poll->data is a linked-list element
     if (webSocketHead) {
-        uS::SocketData *nextData = (uS::SocketData *) webSocketHead->getData();
+        uS::SocketData *nextData = (uS::SocketData *) webSocketHead->getData(); // SocketData
         nextData->prev = webSocket;
         uS::SocketData *data = (uS::SocketData *) webSocket->getData();
         data->next = webSocketHead;
@@ -115,15 +116,16 @@ void Group<isServer>::addWebSocket(Poll *webSocket) {
     webSocketHead = webSocket;
 }
 
+// su: remove webSocket: Poll from linked-list
 template <bool isServer>
 void Group<isServer>::removeWebSocket(Poll *webSocket) {
     uS::SocketData *socketData = (uS::SocketData *) webSocket->getData();
     if (iterators.size()) {
         iterators.top() = socketData->next;
     }
-    if (socketData->prev == socketData->next) {
+    if (socketData->prev == socketData->next) { // su: empy list
         webSocketHead = (Poll *) nullptr;
-    } else {
+    } else { //
         if (socketData->prev) {
             ((uS::SocketData *) socketData->prev->getData())->next = socketData->next;
         } else {
@@ -138,6 +140,7 @@ void Group<isServer>::removeWebSocket(Poll *webSocket) {
 template <bool isServer>
 Group<isServer>::Group(int extensionOptions, Hub *hub, uS::NodeData *nodeData) : uS::NodeData(*nodeData), hub(hub), extensionOptions(extensionOptions) {
     connectionHandler = [](WebSocket<isServer>, HttpRequest) {};
+    transferHandler = [](WebSocket<isServer>) {};
     messageHandler = [](WebSocket<isServer>, char *, size_t, OpCode) {};
     disconnectionHandler = [](WebSocket<isServer>, int, char *, size_t) {};
     pingHandler = pongHandler = [](WebSocket<isServer>, char *, size_t) {};
@@ -168,24 +171,25 @@ void Group<isServer>::stopListening() {
                     SSL_free(ssl);
                 }
 
-                listenData->listenTimer->close([](uv_handle_t *handle) {
-                    delete handle;
-                });
+                listenData->listenTimer->close();
             }
             delete listenData;
         }
     }
 
     if (async) {
-        async->close([](uv_handle_t *h) {
-            delete (Async *) h;
-        });
+        async->close();
     }
 }
 
 template <bool isServer>
 void Group<isServer>::onConnection(std::function<void (WebSocket<isServer>, HttpRequest)> handler) {
     connectionHandler = handler;
+}
+
+template <bool isServer>
+void Group<isServer>::onTransfer(std::function<void (WebSocket<isServer>)> handler) {
+    transferHandler = handler;
 }
 
 template <bool isServer>
@@ -246,7 +250,7 @@ void Group<isServer>::onHttpUpgrade(std::function<void(HttpSocket<isServer>, Htt
 template <bool isServer>
 void Group<isServer>::broadcast(const char *message, size_t length, OpCode opCode) {
     typename WebSocket<isServer>::PreparedMessage *preparedMessage = WebSocket<isServer>::prepareMessage((char *) message, length, opCode, false);
-    forEach([preparedMessage](uWS::WebSocket<isServer> ws) {
+    forEach([preparedMessage](uWS::WebSocket<isServer> ws) { // ws is passed by forEach  function of the group
         ws.sendPrepared(preparedMessage);
     });
     WebSocket<isServer>::finalizeMessage(preparedMessage);
@@ -260,6 +264,7 @@ void Group<isServer>::terminate() {
     stopListening();
 }
 
+// su: close all sockets in this group
 template <bool isServer>
 void Group<isServer>::close(int code, char *message, size_t length) {
     forEach([code, message, length](uWS::WebSocket<isServer> ws) {
@@ -268,9 +273,7 @@ void Group<isServer>::close(int code, char *message, size_t length) {
     stopListening();
     if (timer) {
         timer->stop();
-        timer->close([](uv_handle_t *handle) {
-            delete (Timer *) handle;
-        });
+        timer->close();
     }
 }
 

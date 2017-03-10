@@ -2,24 +2,21 @@
 #define ASIO_H
 
 #include <boost/asio.hpp>
-#include <iostream>
 
-// these should be renamed (don't add more than these, only these are used)
-typedef int uv_os_sock_t;
-typedef void uv_handle_t;
-typedef void (*uv_close_cb)(uv_handle_t *);
-static const int UV_READABLE = EPOLLIN | EPOLLHUP;
-static const int UV_WRITABLE = EPOLLOUT;
-static const int UV_VERSION_MINOR = 5;
+typedef boost::asio::ip::tcp::socket::native_type uv_os_sock_t;
+static const int UV_READABLE = 1;
+static const int UV_WRITABLE = 2;
 
+// su: createLoop, destroy, run
+// extends asio::io_service : similar to channel queue in golang
 struct Loop : boost::asio::io_service {
-
+    //  su: returns pointer
     static Loop *createLoop(bool defaultLoop = true) {
         return new Loop;
     }
 
     void destroy() {
-
+        delete this;
     }
 
     void run() {
@@ -27,72 +24,107 @@ struct Loop : boost::asio::io_service {
     }
 };
 
-struct Async {
 
-    Async(Loop *loop) {
-
-    }
-
-    void start(void (*cb)(Async *)) {
-
-    }
-
-    void send() {
-
-    }
-
-    void close(uv_close_cb cb) {
-
-    }
-
-    void setData(void *data) {
-
-    }
-
-    void *getData() {
-        return nullptr;
-    }
-};
-
+// su: simple timer for bomb activation
 struct Timer {
+    boost::asio::deadline_timer asio_timer;
+    void *data; // will contain Group<isServer> {<Group.cpp}
 
-    Timer(Loop *loop) {
+    Timer(Loop *loop) : asio_timer(*loop) /*asio_timer is given the io_sevice*/ {
 
     }
 
     void start(void (*cb)(Timer *), int first, int repeat) {
-
+        // su: async manager
+        asio_timer.expires_from_now(boost::posix_time::milliseconds(first));
+        // su: start again after some first milliseconds
+        // starts an asyncronous wait
+        asio_timer.async_wait([this, cb, repeat](const boost::system::error_code &ec) {
+            if (ec != boost::asio::error::operation_aborted) {
+                if (repeat) {
+                    start(cb, repeat, repeat);
+                }
+                cb(this);
+            }
+        });
     }
 
     void setData(void *data) {
-
+        this->data = data;
     }
 
     void *getData() {
-        return nullptr;
+        return data;
     }
 
     void stop() {
-
+        asio_timer.cancel();
     }
 
-    void close(uv_close_cb cb) {
-
+    void close() {
+        asio_timer.get_io_service().post([this]() {
+            delete this;
+        });
     }
 };
 
+// su: all the posting and task execution is run on loop
+// su: what is this design
+struct Async {
+    Loop *loop;
+    // su: function pointer 
+    // pointername: cb
+    // function takes Async type as argument
+    void (*cb)(Async *);
+    void *data; // will contain NodeData {>Networking.h}
+
+    boost::asio::io_service::work asio_work;
+
+    Async(Loop *loop) : loop(loop), asio_work(*loop) {
+    }
+
+    void start(void (*cb)(Async *)) {
+        this->cb = cb;
+    }
+
+    void send() {
+        loop->post([this]() {
+            cb(this);
+        });
+    }
+
+    void close() {
+        loop->post([this]() {
+            delete this;
+        });
+    }
+
+    void setData(void *data) {
+        this->data = data;
+    }
+
+    void *getData() {
+        return data; // will be casted to NodeData
+    }
+};
+
+// little advance socket wrapper
 struct Poll {
-    boost::asio::ip::tcp::socket *socket;
-    void *data;
+    boost::asio::posix::stream_descriptor *socket;
+    void *data; // will be casted to SocketData {<Networking.h}
     void (*cb)(Poll *p, int status, int events);
+    Loop *loop;
+    boost::asio::ip::tcp::socket::native_type fd;
 
     Poll(Loop *loop, uv_os_sock_t fd) {
         init(loop, fd);
     }
 
     void init(Loop *loop, uv_os_sock_t fd) {
-        socket = new boost::asio::ip::tcp::socket(*loop);
-        socket->assign(boost::asio::ip::tcp::v4(), fd);
+        this->fd = fd;
+        this->loop = loop; // basically a io_service
+        // su: create a new socket
+        socket = new boost::asio::posix::stream_descriptor(*loop, fd);
         socket->non_blocking(true);
     }
 
@@ -108,11 +140,11 @@ struct Poll {
     }
 
     bool isClosing() {
-        return 0;
+        return !socket;
     }
 
-    uv_os_sock_t getFd() {
-        return socket->native_handle();
+    boost::asio::ip::tcp::socket::native_type getFd() {
+        return fd;//socket->native_handle();
     }
 
     void *getData() {
@@ -120,55 +152,48 @@ struct Poll {
     }
 
     void setCb(void (*cb)(Poll *p, int status, int events)) {
-        std::cout << "Poll::setCb" << std::endl;
         this->cb = cb;
     }
 
-    void read_handler(boost::system::error_code ec, std::size_t) {
-        socket->async_read_some(boost::asio::null_buffers(), [this](boost::system::error_code ec, std::size_t) {
-
-            cb(this, ec.value(), UV_READABLE);
-            read_handler(ec, 0);
-        });
-    }
-
-    void write_handler(boost::system::error_code ec, std::size_t) {
-        socket->async_read_some(boost::asio::null_buffers(), [this](boost::system::error_code ec, std::size_t) {
-            cb(this, ec.value(), UV_WRITABLE);
-            write_handler(ec, 0);
-        });
-    }
-
     void start(int events) {
-        std::cout << "Poll::start" << std::endl;
-
-        if (events & UV_READABLE) {
+        if (events & UV_READABLE) { // su: if event == UV_READABLE
             socket->async_read_some(boost::asio::null_buffers(), [this](boost::system::error_code ec, std::size_t) {
-                read_handler(ec, 0);
+                if (ec != boost::asio::error::operation_aborted) {
+                    // register read write_some
+                    start(UV_READABLE);
+                    // cb(Poll *p, int status, int events)
+                    cb(this, ec ? -1 : 0, UV_READABLE);
+                }
             });
         }
 
         if (events & UV_WRITABLE) {
             socket->async_write_some(boost::asio::null_buffers(), [this](boost::system::error_code ec, std::size_t) {
-                write_handler(ec, 0);
+                if (ec != boost::asio::error::operation_aborted) {
+                    // register next write_some
+                    start(UV_WRITABLE);
+                    cb(this, ec ? -1 : 0, UV_WRITABLE);
+                }
             });
         }
     }
 
     void change(int events) {
-        std::cout << "Poll::change" << std::endl;
-
         socket->cancel();
         start(events);
     }
 
     void stop() {
-        std::cout << "Poll::stop" << std::endl;
         socket->cancel();
     }
 
-    void close(uv_close_cb cb) {
-
+    void close() {
+        socket->release();
+        socket->get_io_service().post([this]() {
+            delete this;
+        });
+        delete socket;
+        socket = nullptr;
     }
 
     void (*getPollCb())(Poll *, int, int) {
@@ -176,7 +201,7 @@ struct Poll {
     }
 
     Loop *getLoop() {
-        return (Loop *) &socket->get_io_service();
+        return loop;//(Loop *) &socket->get_io_service();
     }
 };
 

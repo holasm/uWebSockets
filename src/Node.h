@@ -12,6 +12,12 @@ enum ListenOptions : int {
     ONLY_IPV4 = 2
 };
 
+/**
+ *
+ * 
+ *
+ */
+
 class WIN32_EXPORT Node {
 protected:
     Loop *loop;
@@ -104,9 +110,7 @@ public:
             */
             if (!TIMER && errno != EAGAIN && errno != EWOULDBLOCK) {
                 listenData->listenPoll->stop();
-                listenData->listenPoll->close([](uv_handle_t *handle) {
-                    delete handle;
-                });
+                listenData->listenPoll->close();
                 listenData->listenPoll = nullptr;
 
                 listenData->listenTimer = new Timer(listenData->nodeData->loop);
@@ -116,9 +120,7 @@ public:
             return;
         } else if (TIMER) {
             listenData->listenTimer->stop();
-            listenData->listenTimer->close([](uv_handle_t *handle) {
-                delete handle;
-            });
+            listenData->listenTimer->close();
             listenData->listenTimer = nullptr;
             listenData->listenPoll = new Poll(listenData->nodeData->loop, serverFd);
             listenData->listenPoll->setData(listenData);
