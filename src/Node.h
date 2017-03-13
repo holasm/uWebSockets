@@ -89,7 +89,7 @@ public:
     template <void A(Socket s)>
     static void accept_poll_cb(Poll *p, int status, int events) {
         ListenData *listenData = (ListenData *) p->getData();
-        accept_cb<A, false>(listenData);
+        accept_cb<A, false>(listenData); // su: 
     }
 
     template <void A(Socket s)>
@@ -102,7 +102,7 @@ public:
     static void accept_cb(ListenData *listenData) {
         uv_os_sock_t serverFd = listenData->sock;
         uv_os_sock_t clientFd = accept(serverFd, nullptr, nullptr);
-        if (clientFd == INVALID_SOCKET) {
+        if (clientFd == INVALID_SOCKET /* -1 */) {
             /*
             * If accept is failing, the pending connection won't be removed and the
             * polling will cause the server to spin, using 100% cpu. Switch to a timer
@@ -141,51 +141,56 @@ public:
             SSL_set_mode(ssl, SSL_MODE_RELEASE_BUFFERS);
         }
 
+        // su: new SocketData fot client
         SocketData *socketData = new SocketData(listenData->nodeData);
         socketData->ssl = ssl;
 
+        // create a client socket Poll
         Poll *clientPoll = new Poll(listenData->listenPoll->getLoop(), clientFd);
-        clientPoll->setData(socketData);
+        clientPoll->setData(socketData); // su: set Client socket data
 
         socketData->poll = UV_READABLE;
-        A(clientPoll);
+        A(clientPoll); // su: call onServerAccept()
         } while ((clientFd = accept(serverFd, nullptr, nullptr)) != INVALID_SOCKET);
     }
 
+    // ***
     // todo: hostname, backlog
+    // su: create, bind, listen, accept
     template <void A(Socket s)>
     bool listen(const char *host, int port, uS::TLS::Context sslContext, int options, uS::NodeData *nodeData, void *user) {
         addrinfo hints, *result;
         memset(&hints, 0, sizeof(addrinfo));
 
+        // su: http://man7.org/linux/man-pages/man3/getaddrinfo.3.html
         hints.ai_flags = AI_PASSIVE;
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_family = AF_UNSPEC; // IPv4/IPv6 socket address
+        hints.ai_socktype = SOCK_STREAM; //for TCP use SOCK_STREAM
 
         if (getaddrinfo(host, std::to_string(port).c_str(), &hints, &result)) {
             return true;
         }
 
-        uv_os_sock_t listenFd = SOCKET_ERROR;
+        uv_os_sock_t listenFd = SOCKET_ERROR /* -1 */;
         addrinfo *listenAddr;
-        if ((options & uS::ONLY_IPV4) == 0) {
-            for (addrinfo *a = result; a && listenFd == SOCKET_ERROR; a = a->ai_next) {
-                if (a->ai_family == AF_INET6) {
-                    listenFd = socket(a->ai_family, a->ai_socktype, a->ai_protocol);
+        if ((options & uS::ONLY_IPV4) == 0) { // not ONLY_IPV4
+            for (addrinfo *a = result; a && listenFd == SOCKET_ERROR; a = a->ai_next) { // until gets valid listenFd (!= SICKET_ERROR)
+                if (a->ai_family == AF_INET6) { // IPv6
+                    listenFd = socket(a->ai_family, a->ai_socktype, a->ai_protocol); // < 0 for Error
                     listenAddr = a;
                 }
             }
         }
 
         for (addrinfo *a = result; a && listenFd == SOCKET_ERROR; a = a->ai_next) {
-            if (a->ai_family == AF_INET) {
-                listenFd = socket(a->ai_family, a->ai_socktype, a->ai_protocol);
+            if (a->ai_family == AF_INET) { // IPv4
+                listenFd = socket(a->ai_family, a->ai_socktype, a->ai_protocol); // < 0 for Error
                 listenAddr = a;
             }
         }
 
         if (listenFd == SOCKET_ERROR) {
-            freeaddrinfo(result);
+            freeaddrinfo(result); // free the structure
             return true;
         }
 
@@ -201,17 +206,19 @@ public:
         int enabled = true;
         setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof(enabled));
 
-        if (bind(listenFd, listenAddr->ai_addr, listenAddr->ai_addrlen) || ::listen(listenFd, 512)) {
+        if (bind(listenFd, listenAddr->ai_addr, listenAddr->ai_addrlen) || ::listen(listenFd, 512)) { // if failed (< 0)
             ::close(listenFd);
             freeaddrinfo(result);
             return true;
         }
 
+        // su: the creation of the 
         ListenData *listenData = new ListenData(nodeData);
         listenData->sslContext = sslContext;
         listenData->nodeData = nodeData;
 
-        Poll *listenPoll = new Poll(loop, listenFd);
+        // the creation of the persistance listening socket | :-)
+        Poll *listenPoll = new Poll(loop, listenFd); // group
         listenPoll->setData(listenData);
         listenPoll->setCb(accept_poll_cb<A>);
         listenPoll->start(UV_READABLE);
@@ -223,6 +230,7 @@ public:
         // should be vector of listen data! one group can have many listeners!
         nodeData->user = listenData;
         freeaddrinfo(result);
+        // su: if all is well return false: error
         return false;
     }
 };

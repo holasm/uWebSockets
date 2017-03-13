@@ -74,6 +74,7 @@ private:
     SSL_CTX *context = nullptr;
     std::shared_ptr<std::string> password;
 
+    // su: consider limited size of the password
     static int passwordCallback(char *buf, int size, int rwflag, void *u)
     {
         std::string *password = (std::string *) u;
@@ -174,8 +175,8 @@ struct SocketData {
     int poll;
     bool shuttingDown = false;
 
-    SocketData(NodeData *nodeData) : nodeData(nodeData) {
-
+    SocketData(NodeData *nodeData) : nodeData(nodeData) { z
+                                               
     }
 
     // socket data will be put in this message queue
@@ -217,6 +218,7 @@ struct SocketData {
         }
     } messageQueue;
 
+    // su: Poll is the advanced socket
     Poll *next = nullptr, *prev = nullptr;
 };
 

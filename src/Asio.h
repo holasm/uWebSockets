@@ -155,6 +155,7 @@ struct Poll {
         this->cb = cb;
     }
 
+    // su: start trying to accept connections
     void start(int events) {
         if (events & UV_READABLE) { // su: if event == UV_READABLE
             socket->async_read_some(boost::asio::null_buffers(), [this](boost::system::error_code ec, std::size_t) {

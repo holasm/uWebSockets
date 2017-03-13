@@ -7,6 +7,13 @@
 #include <functional>
 #include <stack>
 
+/**
+ *
+ * Group related functions
+ *
+ */
+
+
 namespace uWS {
 
 struct Hub;

@@ -42,8 +42,15 @@ struct WIN32_EXPORT Hub : private uS::Node, public Group<SERVER>, public Group<C
     void connect(std::string uri, void *user, int timeoutMs = 5000, Group<CLIENT> *eh = nullptr, std::string subprotocol = "");
     void upgrade(uv_os_sock_t fd, const char *secKey, SSL *ssl, const char *extensions, size_t extensionsLength, const char *subprotocol, size_t subprotocolLength, Group<SERVER> *serverGroup = nullptr);
 
-    Hub(int extensionOptions = 0, bool useDefaultLoop = false) : uS::Node(LARGE_BUFFER_SIZE, WebSocketProtocol<SERVER>::CONSUME_PRE_PADDING, WebSocketProtocol<SERVER>::CONSUME_POST_PADDING, useDefaultLoop),
-                                             Group<SERVER>(extensionOptions, this, nodeData), Group<CLIENT>(0, this, nodeData) {
+    /**
+     *
+     * This is epic parent args passing!!!
+     *
+     */
+    
+    Hub(int extensionOptions = 0, bool useDefaultLoop = false) : uS::Node(LARGE_BUFFER_SIZE, WebSocketProtocol<SERVER>::CONSUME_PRE_PADDING, 
+                                            WebSocketProtocol<SERVER>::CONSUME_POST_PADDING, useDefaultLoop),
+                                            Group<SERVER>(extensionOptions, this, nodeData), Group<CLIENT>(0, this, nodeData) {
         inflateInit2(&inflationStream, -15);
         inflationBuffer = new char[LARGE_BUFFER_SIZE];
     }
@@ -54,7 +61,7 @@ struct WIN32_EXPORT Hub : private uS::Node, public Group<SERVER>, public Group<C
     }
 
     using uS::Node::run;
-    using uS::Node::getLoop;
+    using uS::Node::getLoop; // this function will come form Node
     using Group<SERVER>::onConnection;
     using Group<CLIENT>::onConnection;
     using Group<SERVER>::onTransfer;

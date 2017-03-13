@@ -281,6 +281,7 @@ public:
     // changeState
     template<class STATE>
     void enterState(void *socketData, bool initialState = false) {
+        /*ClientSocket | Poll*/
         p->setData(socketData);
         if (Socket(p).getSocketData()->ssl) {
             p->setCb(ssl_io_cb<STATE>);

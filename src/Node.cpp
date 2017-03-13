@@ -6,6 +6,7 @@ void NodeData::asyncCallback(Async *async)
 {
     NodeData *nodeData = (NodeData *) async->getData();
 
+    // 
     nodeData->asyncMutex->lock();
     for (TransferData transferData : nodeData->transferQueue) {
         transferData.p->init(nodeData->loop, transferData.fd);
@@ -21,8 +22,8 @@ void NodeData::asyncCallback(Async *async)
         p->change(socketData->poll);
     }
 
-    nodeData->changePollQueue.clear();
-    nodeData->transferQueue.clear();
+    nodeData->changePollQueue.clear(); // vector
+    nodeData->transferQueue.clear(); // vector
     nodeData->asyncMutex->unlock();
 }
 
