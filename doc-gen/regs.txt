@@ -1,0 +1,6 @@
+function => \*?([a-z]+)\((.)*\)([\s]+){(.|\n)*}
+
+struct => struct([\s]+)([a-z]+)([\s]+){
+
+class => class([\s]+)([a-z]+)([\s]+){
+full-class = class([\s]+)([a-z]+)([\s]+){(.|\n)*}
