@@ -54,10 +54,31 @@ static void base64(unsigned char *src, char *dst) {
     *dst++ = '=';
 }
 
+/**
+ *
+ * 
+ *
+ */
+
+
 template <bool isServer>
 void HttpSocket<isServer>::onData(uS::Socket s, char *data, int length) {
     HttpSocket httpSocket(s);
     HttpSocket::Data *httpData = httpSocket.getData();
+
+// su: actual HttpSocket::Data
+/*    struct Data : uS::SocketData {
+        std::string httpBuffer;
+        size_t contentLength = 0;
+        void *httpUser;
+        bool missedDeadline = false;
+
+        HttpResponse *outstandingResponsesHead = nullptr;
+        HttpResponse *outstandingResponsesTail = nullptr;
+        HttpResponse *preAllocatedResponse = nullptr;
+
+        Data(uS::SocketData *socketData) : uS::SocketData(*socketData) {}
+    };*/
 
     httpSocket.cork(true);
 

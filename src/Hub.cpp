@@ -51,7 +51,7 @@ void Hub::onServerAccept(uS::Socket s) {
     ((Group<SERVER> *) socketData->nodeData)->addHttpSocket(s);
     ((Group<SERVER> *) socketData->nodeData)->httpConnectionHandler(s);
     s.setNoDelay(true);
-    delete socketData;
+    delete socketData; // su: ???
 }
 
 void Hub::onClientConnection(uS::Socket s, bool error) {
@@ -66,11 +66,13 @@ void Hub::onClientConnection(uS::Socket s, bool error) {
     }
 }
 
+// 
 bool Hub::listen(const char *host, int port, uS::TLS::Context sslContext, int options, Group<SERVER> *eh) {
     if (!eh) {
         eh = (Group<SERVER> *) this;
     }
 
+    // su:  
     if (uS::Node::listen<onServerAccept>(host, port, sslContext, options, (uS::NodeData *) eh, nullptr)) {
         eh->errorHandler(port);
         return false;
@@ -144,6 +146,7 @@ void Hub::connect(std::string uri, void *user, int timeoutMs, Group<CLIENT> *eh,
     }
 }
 
+// upgrade to WebSocket Protocol
 void Hub::upgrade(uv_os_sock_t fd, const char *secKey, SSL *ssl, const char *extensions, size_t extensionsLength, const char *subprotocol, size_t subprotocolLength, Group<SERVER> *serverGroup) {
     if (!serverGroup) {
         serverGroup = &getDefaultGroup<SERVER>();

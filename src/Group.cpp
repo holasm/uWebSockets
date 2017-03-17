@@ -15,7 +15,7 @@ void *Group<isServer>::getUserData() {
 
 template <bool isServer>
 void Group<isServer>::timerCallback(Timer *timer) {
-    Group<isServer> *group = (Group<isServer> *) timer->getData();
+    Group<isServer> *group = (Group<isServer> *) timer->getData(); // su: 
 
     group->forEach([](uWS::WebSocket<isServer> ws) {
         typename uWS::WebSocket<isServer>::Data *webSocketData = (typename uWS::WebSocket<isServer>::Data *) ws.getSocketData();
@@ -55,11 +55,12 @@ void Group<isServer>::addHttpSocket(Poll *httpSocket) {
         uS::SocketData *data = (uS::SocketData *) httpSocket->getData();
         data->next = httpSocketHead;
     } else {
+        // su: ???
         httpTimer = new Timer(hub->getLoop());
         httpTimer->setData(this);
         httpTimer->start([](Timer *httpTimer) {
-            Group<isServer> *group = (Group<isServer> *) httpTimer->getData();
-            group->forEachHttpSocket([](HttpSocket<isServer> httpSocket) {
+            Group<isServer> *group /*: NodeData*/ = (Group<isServer> *) httpTimer->getData();
+            group->forEachHttpSocket([](HttpSocket<isServer> httpSocket/*: Poll*/) {
                 if (httpSocket.getData()->missedDeadline) {
                     // recursive? don't think so!
                     httpSocket.terminate();
@@ -82,6 +83,9 @@ void Group<isServer>::removeHttpSocket(Poll *httpSocket) {
     if (socketData->prev == socketData->next) {
         httpSocketHead = (Poll *) nullptr;
 
+        // when no ClientSocket is connected don't try to terminate connection
+        // this is done for HttpSockets only
+        // for WebSocket no need to do this
         httpTimer->stop();
         httpTimer->close();
 
