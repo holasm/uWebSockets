@@ -55,7 +55,7 @@ static void base64(unsigned char *src, char *dst) {
 }
 
 /**
- *
+ * Create a HttpSocket
  * 
  *
  */
@@ -64,7 +64,7 @@ static void base64(unsigned char *src, char *dst) {
 template <bool isServer>
 void HttpSocket<isServer>::onData(uS::Socket s, char *data, int length) {
     HttpSocket httpSocket(s);
-    HttpSocket::Data *httpData = httpSocket.getData();
+    HttpSocket::Data *httpData = httpSocket.getData(); // downcasted SocketData
 
 // su: actual HttpSocket::Data
 /*    struct Data : uS::SocketData {
@@ -80,7 +80,7 @@ void HttpSocket<isServer>::onData(uS::Socket s, char *data, int length) {
         Data(uS::SocketData *socketData) : uS::SocketData(*socketData) {}
     };*/
 
-    httpSocket.cork(true);
+    httpSocket.cork(true); // su: 
 
     if (httpData->contentLength) {
         httpData->missedDeadline = false;

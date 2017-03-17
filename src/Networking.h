@@ -172,10 +172,10 @@ struct SocketData {
     void *user = nullptr;
 
     // combine these two! state!
-    int poll;
+    int poll; // UV_READABLE / UV_WRITABLE
     bool shuttingDown = false;
 
-    SocketData(NodeData *nodeData) : nodeData(nodeData) { z
+    SocketData(NodeData *nodeData) : nodeData(nodeData) {
                                                
     }
 

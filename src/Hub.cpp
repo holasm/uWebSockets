@@ -44,16 +44,35 @@ char *Hub::inflate(char *data, size_t &length) {
 
 
 
+/**
+ * Process already connected client socket data 
+ * using HttpSocket Application protocol
+ * 
+ * Actually p: Poll instance is passed 
+ * which is converted to Socket instance
+ * 
+ * @input:  s: uS::Socket
+ *
+ * @return  boolean, Ok: for listening
+ */
 void Hub::onServerAccept(uS::Socket s) {
     uS::SocketData *socketData = s.getSocketData();
     // initial state, need to start!
     s.enterState<HttpSocket<SERVER>>(new HttpSocket<SERVER>::Data(socketData), true);
-    ((Group<SERVER> *) socketData->nodeData)->addHttpSocket(s);
+    ((Group<SERVER> *) socketData->nodeData)->addHttpSocket(s); // this nodeData was passed from Hub::listen() which is  actually a GroupData
     ((Group<SERVER> *) socketData->nodeData)->httpConnectionHandler(s);
     s.setNoDelay(true);
     delete socketData; // su: ???
 }
 
+/**
+ * Handle client connection
+ * 
+ * @input:  s: uS::Socket
+ * @input:  error: bool
+ *
+ * @return  none
+ */
 void Hub::onClientConnection(uS::Socket s, bool error) {
     HttpSocket<CLIENT>::Data *httpSocketData = (HttpSocket<CLIENT>::Data *) s.getSocketData();
 
@@ -66,7 +85,16 @@ void Hub::onClientConnection(uS::Socket s, bool error) {
     }
 }
 
-// 
+/**
+ * Start listening to port
+ * 
+ * @input: port: int
+ * @input: sslContext: uS::TLS::Context
+ * @input: options: int
+ * @input: eh: Group<SERVER> *
+ *
+ * @return boolean, Ok: for listening
+ */
 bool Hub::listen(const char *host, int port, uS::TLS::Context sslContext, int options, Group<SERVER> *eh) {
     if (!eh) {
         eh = (Group<SERVER> *) this;
@@ -80,6 +108,16 @@ bool Hub::listen(const char *host, int port, uS::TLS::Context sslContext, int op
     return true;
 }
 
+/**
+ * Start listening to port
+ * 
+ * @input: port: int
+ * @input: sslContext: uS::TLS::Context
+ * @input: options: int
+ * @input: eh: Group<SERVER> *
+ *
+ * @return boolean, Ok: for listening
+ */
 bool Hub::listen(int port, uS::TLS::Context sslContext, int options, Group<SERVER> *eh) {
     return listen(nullptr, port, sslContext, options, eh);
 }

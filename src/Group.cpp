@@ -49,7 +49,7 @@ void Group<isServer>::addHttpSocket(Poll *httpSocket) {
     ((uS::SocketData *) httpSocket->getData())->next = nullptr;
     ((uS::SocketData *) httpSocket->getData())->prev = nullptr;
 
-    if (httpSocketHead) {
+    if (httpSocketHead) { // : Poll
         uS::SocketData *nextData = (uS::SocketData *) httpSocketHead->getData();
         nextData->prev = httpSocket;
         uS::SocketData *data = (uS::SocketData *) httpSocket->getData();

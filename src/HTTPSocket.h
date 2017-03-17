@@ -139,7 +139,7 @@ struct WIN32_EXPORT HttpSocket : private uS::Socket {
     HttpSocket(uS::Socket s) : uS::Socket(s) {}
 
     typename HttpSocket::Data *getData() {
-        return (HttpSocket::Data *) getSocketData();
+        return (HttpSocket::Data *) getSocketData(); // downcasting
     }
 
     void upgrade(const char *secKey, const char *extensions,

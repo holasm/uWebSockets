@@ -279,9 +279,9 @@ public:
 
     // this should not start, only change!
     // changeState
-    template<class STATE>
+    template<class STATE> // STATE == HttpSocket | WebSocket
     void enterState(void *socketData, bool initialState = false) {
-        /*ClientSocket | Poll*/
+        /*p: ClientSocket | Poll*/
         p->setData(socketData);
         if (Socket(p).getSocketData()->ssl) {
             p->setCb(ssl_io_cb<STATE>);

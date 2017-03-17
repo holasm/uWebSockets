@@ -1,6 +1,6 @@
 // NOTE: This is not part of the library, this file holds examples and tests
 
-#include "uWS.h"
+#include "uWS/uWS.h"
 #include <iostream>
 #include <chrono>
 #include <cmath>
