@@ -107,6 +107,11 @@ struct HttpRequest {
 
 struct HttpResponse;
 
+
+/**
+ * onData is the entry point, 
+ * onData is called from Hub.cpp 
+ */
 template <const bool isServer>
 struct WIN32_EXPORT HttpSocket : private uS::Socket {
     struct Data : uS::SocketData {

@@ -159,7 +159,7 @@ public:
         if (!socketData->messageQueue.empty() && ((events & UV_WRITABLE) || SSL_want(socketData->ssl) == SSL_READING)) {
             Socket(p).cork(true);
             while (true) {
-                SocketData::Queue::Message *messagePtr = socketData->messageQueue.front();
+                    SocketData::Queue::Message *messagePtr = socketData->messageQueue.front();
                 int sent = SSL_write(socketData->ssl, messagePtr->data, messagePtr->length);
                 if (sent == (ssize_t) messagePtr->length) {
                     if (messagePtr->callback) {
@@ -318,7 +318,9 @@ public:
         getSocketData()->messageQueue.push(message);
     }
 
+    // su: 
     SocketData::Queue::Message *allocMessage(size_t length, const char *data = 0) {
+        // coller malloc version
         SocketData::Queue::Message *messagePtr = (SocketData::Queue::Message *) new char[sizeof(SocketData::Queue::Message) + length];
         messagePtr->length = length;
         messagePtr->data = ((char *) messagePtr) + sizeof(SocketData::Queue::Message);
@@ -346,7 +348,7 @@ public:
             p->change(socketData->poll);
         }
     }
-
+    
     bool write(SocketData::Queue::Message *message, bool &wasTransferred) {
         ssize_t sent = 0;
         SocketData *socketData = getSocketData();
@@ -372,6 +374,7 @@ public:
                     }
                 }
             } else {
+                // ?? where this data goes to
                 sent = ::send(getFd(), message->data, message->length, MSG_NOSIGNAL);
                 if (sent == (ssize_t) message->length) {
                     wasTransferred = false;
@@ -401,7 +404,7 @@ public:
         size_t estimatedLength = T::estimate(message, length) + sizeof(uS::SocketData::Queue::Message);
 
         if (hasEmptyQueue()) {
-            if (estimatedLength <= uS::NodeData::preAllocMaxSize) {
+            if (estimatedLength <= uS::NodeData::preAllocMaxSize /*1024*/ ) {
                 int memoryLength = estimatedLength;
                 int memoryIndex = getSocketData()->nodeData->getMemoryBlockIndex(memoryLength);
 

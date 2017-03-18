@@ -1,0 +1,4 @@
+1. Downcasting of SocketData HttpSocket::Data in HttpSocket.cpp
+2. ::send method in Socket.h
+3. SERVER vs CLIENT enum in HttpSocket.cpp
+4. 

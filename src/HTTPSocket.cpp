@@ -42,47 +42,29 @@ char *getHeaders(char *buffer, char *end, Header *headers, size_t maxHeaders) {
 // UNSAFETY NOTE: assumes 24 byte input length
 static void base64(unsigned char *src, char *dst) {
     static const char *b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    for (int i = 0; i < 18; i += 3) {
+    // SHA1 length == 20 byte
+    // process 18 bytes
+    for (int i = 0; i < 18; i += 3) { // 6 times
         *dst++ = b64[(src[i] >> 2) & 63];
         *dst++ = b64[((src[i] & 3) << 4) | ((src[i + 1] & 240) >> 4)];
         *dst++ = b64[((src[i + 1] & 15) << 2) | ((src[i + 2] & 192) >> 6)];
         *dst++ = b64[src[i + 2] & 63];
     }
+    // process rest 2 bytes
     *dst++ = b64[(src[18] >> 2) & 63];
     *dst++ = b64[((src[18] & 3) << 4) | ((src[19] & 240) >> 4)];
     *dst++ = b64[((src[19] & 15) << 2)];
     *dst++ = '=';
 }
 
-/**
- * Create a HttpSocket
- * 
- *
- */
-
-
 template <bool isServer>
 void HttpSocket<isServer>::onData(uS::Socket s, char *data, int length) {
     HttpSocket httpSocket(s);
     HttpSocket::Data *httpData = httpSocket.getData(); // downcasted SocketData
 
-// su: actual HttpSocket::Data
-/*    struct Data : uS::SocketData {
-        std::string httpBuffer;
-        size_t contentLength = 0;
-        void *httpUser;
-        bool missedDeadline = false;
+    httpSocket.cork(true); // su:
 
-        HttpResponse *outstandingResponsesHead = nullptr;
-        HttpResponse *outstandingResponsesTail = nullptr;
-        HttpResponse *preAllocatedResponse = nullptr;
-
-        Data(uS::SocketData *socketData) : uS::SocketData(*socketData) {}
-    };*/
-
-    httpSocket.cork(true); // su: 
-
-    if (httpData->contentLength) {
+    if (httpData->contentLength) { // ??
         httpData->missedDeadline = false;
         if (httpData->contentLength >= length) {
             getGroup<isServer>(s)->httpDataHandler(httpData->outstandingResponsesTail, data, length, httpData->contentLength -= length);
