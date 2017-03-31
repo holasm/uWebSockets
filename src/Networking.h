@@ -44,12 +44,14 @@ inline SOCKET dup(SOCKET socket) {
     return WSASocketW(pi.iAddressFamily, pi.iSocketType, pi.iProtocol, &pi, 0, WSA_FLAG_OVERLAPPED);
 }
 #else
+
+// su: main file starts here
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <arpa/inet.h>
 #include <cstring>
 #define SOCKET_ERROR -1
 #define INVALID_SOCKET -1
@@ -118,7 +120,7 @@ struct WIN32_EXPORT NodeData {
     void *user = nullptr;
     static const int preAllocMaxSize = 1024;
     char **preAlloc;
-    SSL_CTX *clientContext;
+    SSL_CTX *clientContext; // su: 
 
     Async *async = nullptr;
     pthread_t tid;
@@ -142,6 +144,7 @@ struct WIN32_EXPORT NodeData {
     std::vector<Poll *> changePollQueue;
     static void asyncCallback(Async *async);
 
+    // su: get (legth/15)+1
     static int getMemoryBlockIndex(size_t length) {
         return (length >> 4) + bool(length & 15);
     }
@@ -176,7 +179,7 @@ struct SocketData {
     bool shuttingDown = false;
 
     SocketData(NodeData *nodeData) : nodeData(nodeData) {
-                                               
+                                 
     }
 
     // socket data will be put in this message queue
@@ -222,6 +225,7 @@ struct SocketData {
     Poll *next = nullptr, *prev = nullptr;
 };
 
+// su: 
 struct ListenData : SocketData {
 
     ListenData(NodeData *nodeData) : SocketData(nodeData) {

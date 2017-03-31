@@ -87,7 +87,7 @@ public:
     }
 
     template <void A(Socket s)>
-    static void accept_poll_cb(Poll *p, int status, int events) {
+    static void accept_poll_cb(Poll *p, int status, int events) { // su: status == -1 if operation aborted
         ListenData *listenData = (ListenData *) p->getData();
         accept_cb<A, false>(listenData); // su: 
     }
@@ -127,6 +127,8 @@ public:
             listenData->listenPoll->setCb(accept_poll_cb<A>);
             listenData->listenPoll->start(UV_READABLE);
         }
+
+        // su: tryto listen for more incoming sockets connections
         do {
     #ifdef __APPLE__
         int noSigpipe = 1;
@@ -213,14 +215,14 @@ public:
         }
 
         // su: the creation of the 
-        ListenData *listenData = new ListenData(nodeData);
+        ListenData *listenData = new ListenData(nodeData /*Group*/);
         listenData->sslContext = sslContext;
-        listenData->nodeData = nodeData;
+        listenData->nodeData = nodeData; /*Group*/
 
         // the creation of the persistance listening socket | :-)
         Poll *listenPoll = new Poll(loop, listenFd); // group
         listenPoll->setData(listenData);
-        listenPoll->setCb(accept_poll_cb<A>);
+        listenPoll->setCb(accept_poll_cb<A>); // su: A == onServerAccept
         listenPoll->start(UV_READABLE);
 
         listenData->listenPoll = listenPoll;
@@ -230,7 +232,7 @@ public:
         // should be vector of listen data! one group can have many listeners!
         nodeData->user = listenData;
         freeaddrinfo(result);
-        // su: if all is well return false: error
+        // su: if all is well return false: no error
         return false;
     }
 };

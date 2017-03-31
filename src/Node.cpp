@@ -27,9 +27,10 @@ void NodeData::asyncCallback(Async *async)
     nodeData->asyncMutex->unlock();
 }
 
+// su: 
 Node::Node(int recvLength, int prePadding, int postPadding, bool useDefaultLoop) {
     nodeData = new NodeData;
-    nodeData->recvBufferMemoryBlock = new char[recvLength];
+    nodeData->recvBufferMemoryBlock = new char[recvLength]; // su: alocationg memory
     nodeData->recvBuffer = nodeData->recvBufferMemoryBlock + prePadding;
     nodeData->recvLength = recvLength - prePadding - postPadding;
 

@@ -69,7 +69,7 @@ struct Timer {
 };
 
 // su: all the posting and task execution is run on loop
-// su: what is this design
+// su: used for posting jobs as callback
 struct Async {
     Loop *loop;
     // su: function pointer 
@@ -158,6 +158,7 @@ struct Poll {
     // su: start trying to accept connections
     void start(int events) {
         if (events & UV_READABLE) { // su: if event == UV_READABLE
+            // su: read asyncronously from buffer
             socket->async_read_some(boost::asio::null_buffers(), [this](boost::system::error_code ec, std::size_t) {
                 if (ec != boost::asio::error::operation_aborted) {
                     // register read write_some

@@ -10,10 +10,31 @@
 #include <iostream>
 
 namespace uWS {
+/*
+  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-------+-+-------------+-------------------------------+
+ |F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+ |I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+ |N|V|V|V|       |S|             |   (if payload len==126/127)   |
+ | |1|2|3|       |K|             |                               |
+ +-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+ |     Extended payload length continued, if payload len == 127  |
+ + - - - - - - - - - - - - - - - +-------------------------------+
+ |                               |Masking-key, if MASK set to 1  |
+ +-------------------------------+-------------------------------+
+ | Masking-key (continued)       |          Payload Data         |
+ +-------------------------------- - - - - - - - - - - - - - - - +
+ :                     Payload Data continued ...                :
+ + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+ |                     Payload Data continued ...                |
+ +---------------------------------------------------------------+
+*/
 
 // UNSAFETY NOTE: assumes *end == '\r' (might unref end pointer)
 char *getHeaders(char *buffer, char *end, Header *headers, size_t maxHeaders) {
     for (unsigned int i = 0; i < maxHeaders; i++) {
+                                    // key end found
         for (headers->key = buffer; (*buffer != ':') & (*buffer > 32); *(buffer++) |= 32);
         if (*buffer == '\r') {
             if ((buffer != end) & (buffer[1] == '\n') & (i > 0)) {
@@ -24,12 +45,13 @@ char *getHeaders(char *buffer, char *end, Header *headers, size_t maxHeaders) {
             }
         } else {
             headers->keyLength = buffer - headers->key;
+                                                               // value end found
             for (buffer++; (*buffer == ':' || *buffer < 33) && *buffer != '\r'; buffer++);
             headers->value = buffer;
             buffer = (char *) memchr(buffer, '\r', end - buffer); //for (; *buffer != '\r'; buffer++);
             if (buffer /*!= end*/ && buffer[1] == '\n') {
                 headers->valueLength = buffer - headers->value;
-                buffer += 2;
+                buffer += 2; // skip /r/n
                 headers++;
             } else {
                 return nullptr;
@@ -64,6 +86,7 @@ void HttpSocket<isServer>::onData(uS::Socket s, char *data, int length) {
 
     httpSocket.cork(true); // su:
 
+    // su: for connection set up pass httpData->contentLength == 0
     if (httpData->contentLength) { // ??
         httpData->missedDeadline = false;
         if (httpData->contentLength >= length) {
@@ -77,6 +100,7 @@ void HttpSocket<isServer>::onData(uS::Socket s, char *data, int length) {
         }
     }
 
+    // su: for connection set up pass httpData->httpBuffer.length() is zero
     if (FORCE_SLOW_PATH || httpData->httpBuffer.length()) {
         if (httpData->httpBuffer.length() + length > MAX_HEADER_BUFFER_SIZE) {
             httpSocket.onEnd(s);
@@ -92,13 +116,14 @@ void HttpSocket<isServer>::onData(uS::Socket s, char *data, int length) {
     char *end = data + length;
     char *cursor = data;
     *end = '\r';
-    Header headers[MAX_HEADERS];
+    Header headers[MAX_HEADERS]; // su: create an array of Headers
     do {
         char *lastCursor = cursor;
         if ((cursor = getHeaders(cursor, end, headers, MAX_HEADERS))) {
             HttpRequest req(headers);
 
-            if (isServer) {
+            // su: 
+            if (isServer) { // Program is acting as a server
                 headers->valueLength = std::max<int>(0, headers->valueLength - 9);
                 httpData->missedDeadline = false;
                 if (req.getHeader("upgrade", 7)) {
@@ -110,13 +135,21 @@ void HttpSocket<isServer>::onData(uS::Socket s, char *data, int length) {
                         Header subprotocol = req.getHeader("sec-websocket-protocol", 22);
                         if (secKey.valueLength == 24) {
                             bool perMessageDeflate;
-                            httpSocket.upgrade(secKey.value, extensions.value, extensions.valueLength,
-                                               subprotocol.value, subprotocol.valueLength, &perMessageDeflate);
+                            
+                            // su: upgrade to WebSocket connection
+                            httpSocket.upgrade(secKey.value, 
+                                                extensions.value, extensions.valueLength,
+                                                subprotocol.value, subprotocol.valueLength, 
+                                                &perMessageDeflate);
+                            // su: socket is UV_WRITABLE now
                             getGroup<SERVER>(s)->removeHttpSocket(s);
+
+                            // su: attatch websocket onData handler
                             s.enterState<WebSocket<SERVER>>(new WebSocket<SERVER>::Data(perMessageDeflate, httpData));
                             getGroup<SERVER>(s)->addWebSocket(s);
+
                             s.cork(true);
-                            getGroup<SERVER>(s)->connectionHandler(WebSocket<SERVER>(s), req);
+                            getGroup<SERVER>(s)->connectionHandler(WebSocket<SERVER>(s), req); // some handler
                             s.cork(false);
                             delete httpData;
                         } else {
@@ -171,6 +204,7 @@ void HttpSocket<isServer>::onData(uS::Socket s, char *data, int length) {
 
                     delete httpData;
                 } else {
+                    // su: no upgrade Header was found
                     httpSocket.onEnd(s);
                 }
                 return;

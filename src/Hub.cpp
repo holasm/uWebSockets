@@ -50,6 +50,8 @@ char *Hub::inflate(char *data, size_t &length) {
  * 
  * Actually p: Poll instance is passed 
  * which is converted to Socket instance
+ *
+ * The (uS::Socket)s is the clientPoll
  * 
  * @input:  s: uS::Socket
  *
@@ -59,7 +61,9 @@ void Hub::onServerAccept(uS::Socket s) {
     uS::SocketData *socketData = s.getSocketData();
     // initial state, need to start!
     s.enterState<HttpSocket<SERVER>>(new HttpSocket<SERVER>::Data(socketData), true);
-    ((Group<SERVER> *) socketData->nodeData)->addHttpSocket(s); // this nodeData was passed from Hub::listen() which is  actually a GroupData
+    // this nodeData was passed from Hub::listen() which is  actually a GroupData
+    // this nodeData is the groupData
+    ((Group<SERVER> *) socketData->nodeData)->addHttpSocket(s); 
     ((Group<SERVER> *) socketData->nodeData)->httpConnectionHandler(s);
     s.setNoDelay(true);
     delete socketData; // su: ???
@@ -97,7 +101,7 @@ void Hub::onClientConnection(uS::Socket s, bool error) {
  */
 bool Hub::listen(const char *host, int port, uS::TLS::Context sslContext, int options, Group<SERVER> *eh) {
     if (!eh) {
-        eh = (Group<SERVER> *) this;
+        eh = (Group<SERVER> *) this; // su: ???
     }
 
     // su:  

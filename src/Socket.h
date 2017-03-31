@@ -19,6 +19,7 @@ public:
         return p->getPollCb();
     }
 
+    // su: 
     void transfer(NodeData *nodeData, void (*cb)(Poll *)) {
         SocketData *socketData = getSocketData();
 
@@ -27,6 +28,7 @@ public:
         nodeData->asyncMutex->unlock();
 
         if (socketData->nodeData->tid != nodeData->tid) {
+            // su: send to all threads
             nodeData->async->send();
         } else {
             NodeData::asyncCallback(nodeData->async);
@@ -148,7 +150,7 @@ public:
     template <class STATE>
     static void ssl_io_cb(Poll *p, int status, int events) {
         SocketData *socketData = Socket(p).getSocketData();
-        NodeData *nodeData = socketData->nodeData;
+        NodeData *nodeData = socketData->nodeData; // su: server Group data
         SSL *ssl = socketData->ssl;
 
         if (status < 0) {
@@ -199,7 +201,7 @@ public:
                 int length = SSL_read(ssl, nodeData->recvBuffer, nodeData->recvLength);
                 if (length <= 0) {
                     switch (SSL_get_error(ssl, length)) {
-                    case SSL_ERROR_WANT_READ:
+                    case SSL_ERROR_WANT_READ: // su: try to read the SSL
                         break;
                     case SSL_ERROR_WANT_WRITE:
                         if ((socketData->poll & UV_WRITABLE) == 0) {
@@ -218,7 +220,7 @@ public:
                         return;
                     }
                 }
-            } while (SSL_pending(ssl));
+            } while (SSL_pending(ssl)); // try to verify certificate
         }
     }
 
@@ -232,10 +234,13 @@ public:
             return;
         }
 
+        // su: after successfull write of all messages make the socketData->poll = READABLE
         if (events & UV_WRITABLE) {
             if (!socketData->messageQueue.empty() && (events & UV_WRITABLE)) {
                 Socket(p).cork(true);
+                // su: write all the data
                 while (true) {
+                    // ***su: here the program flow comes only when incomplete message was sent in ::write method
                     SocketData::Queue::Message *messagePtr = socketData->messageQueue.front();
                     ssize_t sent = ::send(Socket(p).getFd(), messagePtr->data, messagePtr->length, MSG_NOSIGNAL);
                     if (sent == (ssize_t) messagePtr->length) {
@@ -268,7 +273,8 @@ public:
 
         if (events & UV_READABLE) {
             int length = recv(Socket(p).getFd(), nodeData->recvBuffer, nodeData->recvLength, 0);
-            if (length > 0) {
+            if (length > 0) { // su: some data frames is read
+                // try to upgrade
                 STATE::onData(p, nodeData->recvBuffer, length);
             } else if (length <= 0 || (length == SOCKET_ERROR && errno != EWOULDBLOCK)) {
                 STATE::onEnd(p);
@@ -320,12 +326,13 @@ public:
 
     // su: 
     SocketData::Queue::Message *allocMessage(size_t length, const char *data = 0) {
-        // coller malloc version
+        // su: cooler malloc version
         SocketData::Queue::Message *messagePtr = (SocketData::Queue::Message *) new char[sizeof(SocketData::Queue::Message) + length];
         messagePtr->length = length;
         messagePtr->data = ((char *) messagePtr) + sizeof(SocketData::Queue::Message);
         messagePtr->nextMessage = nullptr;
 
+        // su: keep the data with the ..::Message side by side
         if (data) {
             memcpy((char *) messagePtr->data, data, messagePtr->length);
         }
@@ -334,7 +341,7 @@ public:
     }
 
     void freeMessage(SocketData::Queue::Message *message) {
-        delete [] (char *) message;
+        delete [] (char *) message; // su: messagePtr
     }
 
     // p->threadSafeChange Linux epoll is thread safe!
@@ -349,6 +356,7 @@ public:
         }
     }
     
+    // 
     bool write(SocketData::Queue::Message *message, bool &wasTransferred) {
         ssize_t sent = 0;
         SocketData *socketData = getSocketData();
@@ -374,7 +382,7 @@ public:
                     }
                 }
             } else {
-                // ?? where this data goes to
+                // su: send the message to the client
                 sent = ::send(getFd(), message->data, message->length, MSG_NOSIGNAL);
                 if (sent == (ssize_t) message->length) {
                     wasTransferred = false;
@@ -388,17 +396,20 @@ public:
                     message->data += sent;
                 }
 
+                // su: if all of the message->data was not sent
                 if ((socketData->poll & UV_WRITABLE) == 0) {
                     socketData->poll |= UV_WRITABLE;
                     changePoll(socketData);
                 }
             }
         }
+        // su: push the remaining message
         socketData->messageQueue.push(message);
         wasTransferred = true;
         return true;
     }
 
+    // su: called from HttpSocket.cpp ot WebSocket.cpp
     template <class T, class D>
     void sendTransformed(const char *message, size_t length, void(*callback)(void *httpSocket, void *data, bool cancelled, void *reserved), void *callbackData, D transformData) {
         size_t estimatedLength = T::estimate(message, length) + sizeof(uS::SocketData::Queue::Message);
